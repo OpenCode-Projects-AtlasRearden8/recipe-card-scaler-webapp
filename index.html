@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Recipe Card Scaler — cook at any batch size</title>
+<style>
+  :root {
+    --bg: #faf7f2;
+    --card: #ffffff;
+    --ink: #2d2a26;
+    --muted: #6f6a62;
+    --accent: #b34700;
+    --accent-soft: #fdeadd;
+    --border: #e5ded4;
+    --good: #2e7d32;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 74rem; margin: 0 auto; padding: 1rem 1rem 4rem; }
+  header.site { text-align: center; padding: 1.5rem 0 0.5rem; }
+  header.site h1 { margin: 0; font-size: 1.8rem; }
+  header.site p.sub { margin: 0.25rem 0 0; color: var(--muted); font-style: italic; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.2rem;
+    margin-top: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  h2 { font-size: 1.15rem; margin: 0 0 0.6rem; }
+  h2 .hint { font-weight: normal; color: var(--muted); font-size: 0.85rem; display: block; margin-top: 0.15rem; }
+  textarea, input[type="text"], input[type="number"] {
+    font: inherit;
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.5rem 0.6rem;
+    background: #fff;
+    color: var(--ink);
+  }
+  textarea { resize: vertical; }
+  textarea#recipeInput { min-height: 12rem; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.92rem; }
+  .row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0.45rem 0.9rem;
+    cursor: pointer;
+  }
+  button:hover { filter: brightness(1.08); }
+  button.secondary { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  button.small { padding: 0.25rem 0.6rem; font-size: 0.85rem; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 800px) { .grid2 { grid-template-columns: 1fr; } }
+  .scalebar {
+    display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: flex-end;
+    background: var(--accent-soft); border-radius: var(--radius);
+    padding: 0.8rem 1rem; margin-top: 1rem;
+  }
+  .scalebar .field { display: flex; flex-direction: column; gap: 0.15rem; }
+  .scalebar label { font-size: 0.8rem; color: var(--muted); }
+  .scalebar input[type="number"] { width: 7rem; }
+  .factor-badge {
+    font-size: 1.35rem; font-variant-numeric: tabular-nums;
+    background: #fff; border: 1px solid var(--border); border-radius: 999px;
+    padding: 0.15rem 0.9rem; align-self: center;
+  }
+  table.ingredients { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+  table.ingredients th {
+    text-align: left; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--muted); border-bottom: 2px solid var(--border); padding: 0.35rem 0.5rem;
+  }
+  table.ingredients td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  td.amt { font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: bold; }
+  td.amt span.changed { color: var(--good); }
+  td.orig { color: var(--muted); white-space: nowrap; }
+  td.unit-col { white-space: nowrap; color: var(--muted); }
+  .instructions { white-space: pre-wrap; font-size: 0.97rem; }
+  .instructions .step { margin-bottom: 0.4rem; }
+  .note-box { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 0.6rem 0.9rem; border-radius: 0 6px 6px 0; margin-top: 0.5rem; font-size: 0.92rem; }
+  .pantry-group { margin-bottom: 0.75rem; }
+  .pantry-group h3 { font-size: 0.9rem; margin: 0.3rem 0 0.2rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; }
+  .pantry-group ul { margin: 0; padding-left: 1.2rem; }
+  .hidden { display: none; }
+  .empty { color: var(--muted); font-style: italic; }
+  .pill { display:inline-block; font-size:0.75rem; background:var(--accent-soft); color:var(--accent); border-radius:999px; padding:0.05rem 0.55rem; margin-left:0.4rem; }
+  .library-item { display: flex; gap: 0.5rem; align-items: center; padding: 0.35rem 0; border-bottom: 1px dashed var(--border); }
+  .library-item .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  footer { text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 3rem; }
+  .toast {
+    position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%);
+    background: var(--ink); color: #fff; padding: 0.5rem 1rem; border-radius: 8px;
+    opacity: 0; transition: opacity 0.3s; pointer-events: none; font-size: 0.9rem;
+    z-index: 10;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="site">
+    <h1>Recipe Card Scaler</h1>
+    <p class="sub">Paste a recipe. Cook at any batch size. Works offline — everything stays on this device.</p>
+  </header>
+
+  <section class="card" id="inputCard">
+    <h2>1. Paste your recipe <span class="hint">Amounts like 1 1/2, 0.5, or 3/4 all work. Headers like “Ingredients” and “Directions” help.</span></h2>
+    <textarea id="recipeInput" placeholder="Tomato Soup (serves 4)&#10;&#10;2 tbsp olive oil&#10;1 1/2 cups chopped onion&#10;28 oz crushed tomatoes&#10;2 cups vegetable broth&#10;1/2 tsp salt&#10;&#10;Heat oil in a pot. Cook onion 5 minutes, until soft.&#10;Simmer 20 minutes, then blend until smooth.&#10;&#10;For a baked version: pour into a 9x13 baking dish and bake at 375°F for 25 minutes."></textarea>
+    <div class="row" style="margin-top:0.6rem">
+      <button id="parseBtn">Parse recipe</button>
+      <button id="sampleBtn" class="secondary">Load sample</button>
+      <button id="clearBtn" class="ghost">Clear</button>
+      <span id="parseStatus" class="empty"></span>
+    </div>
+  </section>
+
+  <section id="results" class="hidden">
+
+    <div class="scalebar">
+      <div class="field">
+        <label for="servingsOrig">Original servings</label>
+        <input type="number" id="servingsOrig" min="0.5" step="0.5" value="4">
+      </div>
+      <div class="field">
+        <label for="servingsTarget">Target servings</label>
+        <input type="number" id="servingsTarget" min="0.5" step="0.5" value="4">
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button id="setFactorBtn">Scale to servings</button>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button id="halveBtn" class="secondary">Halve</button>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button id="doubleBtn" class="secondary">Double</button>
+      </div>
+      <div class="field">
+        <label>&nbsp;</label>
+        <button id="resetBtn" class="ghost">Reset (×1)</button>
+      </div>
+      <div class="factor-badge" id="factorBadge" title="Current scale factor">×1</div>
+    </div>
+
+    <section class="card">
+      <h2>Recipe card <span class="hint">Edit the title any time — it becomes the library name when you save.</span></h2>
+      <input type="text" id="recipeTitle" placeholder="Recipe title" value="">
+    </section>
+
+    <section class="card">
+      <h2>Ingredients <span class="hint">Green = amount changed by scaling. Amounts are snapped to cook-friendly fractions.</span></h2>
+      <table class="ingredients" id="ingTable">
+        <thead>
+          <tr>
+            <th>Scaled</th>
+            <th>Unit</th>
+            <th>Ingredient</th>
+            <th>Original</th>
+          </tr>
+        </thead>
+        <tbody id="ingBody"></tbody>
+      </table>
+      <div id="ingEmpty" class="empty hidden">No amounts detected on these lines — pass-through items are kept as typed.</div>
+    </section>
+
+    <section class="card">
+      <h2>Instructions <span class="hint">Ingredient amounts inside steps are scaled too. Times and oven temperatures are deliberately left alone.</span></h2>
+      <div id="instrOutput" class="instructions"></div>
+    </section>
+
+    <section class="card grid2">
+      <div>
+        <h2>Oven &amp; time notes <span class="hint">Detected from your text. Fully editable — bake time does NOT simply double with batch size.</span></h2>
+        <div id="ovenNotes"></div>
+        <div class="row" style="margin-top:0.5rem">
+          <button id="addOvenNoteBtn" class="ghost small">+ Add note</button>
+        </div>
+        <div class="note-box" id="timeAdvice"></div>
+      </div>
+      <div>
+        <h2>Pan-size hints <span class="hint">Based on pan area. Bigger batches need bigger — or extra — pans.</span></h2>
+        <div id="panHints"></div>
+        <div class="note-box hidden" id="panAdvice"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Pantry list <span class="hint">Grouped for shopping. Copy in merge format — it pastes straight into meal-rotation-planner.</span></h2>
+      <div id="pantryGroups"></div>
+      <div class="row" style="margin-top:0.6rem">
+        <button id="copyPantryBtn">Copy merge format</button>
+        <button id="dlPantryBtn" class="secondary">Download .txt</button>
+        <button id="dlHtmlBtn" class="ghost">Download card .html</button>
+      </div>
+      <p class="hint" style="margin:0.5rem 0 0">Merge format: a title line plus <code>## Category</code> sections of plain bullets, so meal-rotation-planner (or any plain-text list) can absorb it directly.</p>
+    </section>
+
+    <section class="card">
+      <h2>Keep-card library <span class="hint">Saved in this browser's localStorage. Nothing leaves your machine.</span></h2>
+      <div class="row" style="margin-bottom:0.6rem">
+        <input type="text" id="saveName" placeholder="Card name (optional — defaults to title)" style="flex:1; min-width:12rem">
+        <button id="saveBtn">Save current card</button>
+        <button id="exportBtn" class="ghost">Export all</button>
+        <button id="importBtn" class="ghost">Import file</button>
+        <input type="file" id="importFile" accept=".json,.txt" class="hidden">
+      </div>
+      <div id="libraryList"></div>
+      <div id="libraryEmpty" class="empty hidden">Library is empty — parse a recipe and save it to get started.</div>
+    </section>
+
+  </section>
+
+  <footer>
+    Recipe Card Scaler · part of the free-kitchen-cheatsheet-pack family ·
+    <a href="https://dylanasdale.github.io">dylanasdale.github.io</a> · MIT License · Asdale Dynamics, LLC
+  </footer>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<noscript><p style="text-align:center">This app needs JavaScript enabled.</p></noscript>
+
+<script>
+/*__PURE_MATH_START__*/
+var RECIPE_MATH = (function () {
+  "use strict";
+
+  function gcd(a, b) {
+    a = Math.abs(Math.round(a));
+    b = Math.abs(Math.round(b));
+    while (b) { var t = b; b = a % b; a = t; }
+    return a || 1;
+  }
+
+  var VULGAR_FRACTIONS = { "½": 0.5, "¼": 0.25, "¾": 0.75, "⅓": 1 / 3, "⅔": 2 / 3, "⅛": 0.125, "⅜": 0.375, "⅝": 0.625, "⅞": 0.875 };
+
+  function fractionToDecimal(text) {
+    if (text === null || text === undefined) return null;
+    var s = String(text).trim().replace(/[−–]/g, "-");
+    if (!s) return null;
+    var m = s.match(/^([+-]?\d+)?\s*([½¼¾⅓⅔⅛⅜⅝⅞])$/);
+    if (m) {
+      var whole = m[1] !== undefined && m[1] !== "" ? parseFloat(m[1]) : 0;
+      return whole + VULGAR_FRACTIONS[m[2]];
+    }
+    var mixed = s.match(/^([+-]?\d+)\s+(\d+)\s*\/\s*(\d+)$/);
+    if (mixed) return parseFloat(mixed[1]) + parseFloat(mixed[2]) / parseFloat(mixed[3]);
+    var frac = s.match(/^([+-]?\d+)\s*\/\s*(\d+)$/);
+    if (frac) {
+      if (parseFloat(frac[2]) === 0) return null;
+      return parseFloat(frac[1]) / parseFloat(frac[2]);
+    }
+    var v = parseFloat(s);
+    return isNaN(v) ? null : v;
+  }
+
+  function decimalToFracString(value, allowThirds) {
+    if (value === null || value === undefined || !isFinite(value)) return null;
+    if (value === 0) return "0";
+    var sign = value < 0 ? "-" : "";
+    var v = Math.abs(value);
+    var whole = Math.floor(v + 1e-9);
+    var rem = v - whole;
+    if (rem < 1e-9) return sign + whole;
+    var denoms = allowThirds === false ? [2, 4, 8, 16] : [2, 3, 4, 6, 8, 16];
+    var best = null, bestErr = Infinity;
+    for (var i = 0; i < denoms.length; i++) {
+      var d = denoms[i];
+      var n = Math.round(rem * d);
+      if (n === 0 || n === d) continue;
+      var g = gcd(n, d);
+      var nn = n / g, dd = d / g;
+      var err = Math.abs(rem - nn / dd);
+      if (err < bestErr - 1e-12) { bestErr = err; best = [nn, dd]; }
+    }
+    if (best && bestErr < 0.02) {
+      if (best[1] === 1) return sign + (whole + best[0]);
+      if (whole === 0) return sign + best[0] + "/" + best[1];
+      return sign + whole + " " + best[0] + "/" + best[1];
+    }
+    var rounded = Math.round(value * 100) / 100;
+    return String(rounded);
+  }
+
+  function niceAmount(value) {
+    if (value === null || value === undefined || !isFinite(value)) return null;
+    var abs = Math.abs(value);
+    if (abs >= 40) return Math.round(value);
+    var snap = null;
+    var whole = Math.floor(value);
+    var rem = value - whole;
+    if (rem > 0) {
+      var probe = decimalToFracString(value, true);
+      var back = fractionToDecimal(probe);
+      if (probe !== null && back !== null && Math.abs(back - value) < 0.02 * Math.max(abs, 1)) snap = back;
+    } else {
+      snap = value;
+    }
+    if (snap !== null) return snap;
+    var tenth = Math.round(value * 10) / 10;
+    return tenth;
+  }
+
+  function scaledNice(original, factor) {
+    if (original === null || original === undefined || !isFinite(original)) return null;
+    if (factor === null || factor === undefined || !isFinite(factor)) factor = 1;
+    if (factor <= 0) return null;
+    return niceAmount(original * factor);
+  }
+
+  var UNIT_ALIASES = {
+    cup: "cup", cups: "cup", c: "cup",
+    tbsp: "tbsp", tbs: "tbsp", tablespoon: "tbsp", tablespoons: "tbsp", "tbsp.": "tbsp",
+    tsp: "tsp", teaspoon: "tsp", teaspoons: "tsp", "tsps.": "tsp",
+    oz: "oz", ounce: "oz", ounces: "oz",
+    lb: "lb", lbs: "lb", pound: "lb", pounds: "lb",
+    g: "g", gram: "g", grams: "g",
+    kg: "kg", kilogram: "kg", kilograms: "kg",
+    ml: "ml", milliliter: "ml", milliliters: "ml",
+    l: "l", liter: "l", liters: "l", litre: "l", litres: "l",
+    qt: "qt", quart: "qt", quarts: "qt",
+    pint: "pint", pints: "pint", pt: "pint",
+    pinch: "pinch", pinches: "pinch", dash: "dash", dashes: "dash",
+    clove: "clove", cloves: "clove",
+    can: "can", cans: "can", package: "package", pkg: "package", packages: "package",
+    slice: "slice", slices: "slice", sheet: "sheet", sheets: "sheet",
+    sprig: "sprig", sprigs: "sprig", stalk: "stalk", stalks: "stalk",
+    stick: "stick", sticks: "stick",
+    bunch: "bunch", bunches: "bunch", head: "head", heads: "head",
+    handful: "handful", handfuls: "handful",
+    large: "large", medium: "medium", small: "small",
+    whole: "whole", each: "each", dozen: "dozen"
+  };
+
+  function normalizeUnit(u) {
+    if (!u) return "";
+    var key = String(u).trim().replace(/\.$/, "").toLowerCase().replace(/\.$/, "");
+    if (UNIT_ALIASES[key]) return UNIT_ALIASES[key];
+    var singular = key.replace(/s$/, "");
+    return UNIT_ALIASES[singular] || key;
+  }
+
+  var AMOUNT_TOKEN = "\\d+\\s+\\d+/\\d+|\\d+/\\d+|\\d+\\.\\d+|\\d+|[½¼¾⅓⅔⅛⅜⅝⅞]";
+  var UNIT_WORDS = "tbsps?|tbs|tablespoons?|tsps?|teaspoons?|tsp|cups?|ounces?|oz|pounds?|lbs?|grams?|kg|ml|milliliters?|liters?|litres?|l\\b|quarts?|pints?|cloves?|cans?|packages?|sticks?|slices?|sheets?|sprigs?|stalks?|bunch(?:es)?|heads?|pinches?|dash(?:es)?";
+
+  var PLURALIZABLE = {
+    cup: "cups", tablespoon: "tablespoons", teaspoon: "teaspoons",
+    clove: "cloves", can: "cans", slice: "slices", sheet: "sheets",
+    sprig: "sprigs", stalk: "stalks", stick: "sticks", bunch: "bunches",
+    head: "heads", handful: "handfuls", ounce: "ounces", pound: "pounds",
+    gram: "grams", liter: "liters", litre: "litres", quart: "quarts",
+    pint: "pints", pinch: "pinches", dash: "dashes", package: "packages"
+  };
+
+  function adaptUnit(word, count) {
+    var canon = normalizeUnit(word);
+    var plural = PLURALIZABLE[canon];
+    if (!plural) return word;
+    return count > 1 ? plural : canon;
+  }
+
+  function scaleLine(line, factor) {
+    if (typeof line !== "string") return { text: line === undefined || line === null ? "" : String(line), changed: false };
+    if (!isFinite(factor) || factor === 1) return { text: line, changed: false };
+    var changed = false;
+    var re = new RegExp("(^|[^A-Za-z0-9/\\u00b7\\-])(" + AMOUNT_TOKEN + ")(\\s*(?:" + UNIT_WORDS + ")?)\\b", "g");
+    var out = line.replace(re, function (match, preSep, numTok, unitPart, offset, full) {
+      var isVulgar = /[½¼¾⅓⅔⅛⅜⅝⅞]/.test(numTok);
+      var val = isVulgar ? VULGAR_FRACTIONS[numTok] : fractionToDecimal(numTok);
+      if (val === null || isNaN(val) || val === 0 || val < 1 / 64) return match;
+      var rest = full.slice(offset + match.length);
+      var bareNum = !/\S/.test(unitPart);
+      if (bareNum) {
+        if (/^\s*[-\u2013]/.test(rest)) return match;
+        if (/^\s*(minutes?|mins?|hours?|hrs?|seconds?|secs?\b|°|degrees?)/i.test(rest)) return match;
+        if (/^\s*[A-Za-z]/.test(rest)) return match;
+      }
+      var scaled = scaledNice(val, factor);
+      if (scaled === null || Math.abs(scaled - val) < 1e-9) return match;
+      changed = true;
+      var fracStr = decimalToFracString(scaled, true);
+      if (fracStr === null) fracStr = String(scaled);
+      var unitOut = unitPart;
+      if (unitPart && unitPart.trim()) {
+        unitOut = unitPart.replace(unitPart.trim(), adaptUnit(unitPart.trim(), scaled));
+      }
+      return preSep + fracStr + unitOut;
+    });
+    return { text: out, changed: changed };
+  }
+
+  function isKnownUnit(u) {
+    var canon = normalizeUnit(u);
+    if (!canon) return false;
+    for (var k in UNIT_ALIASES) {
+      if (UNIT_ALIASES[k] === canon) return true;
+    }
+    return false;
+  }
+
+  function parseIngredientLine(line) {
+    if (typeof line !== "string") return null;
+    var s = line.replace(/^[-\u2022\*\u25aa\u00b7\s]+/, "").trim();
+    if (!s) return null;
+    var re = new RegExp("^(" + AMOUNT_TOKEN + ")\\s*([A-Za-z][A-Za-z.#+-]{0,14})?\\s*(.*)$");
+    var m = s.match(re);
+    if (!m) return null;
+    var amount = fractionToDecimal(m[1].trim());
+    if (amount === null || isNaN(amount) || /[A-Za-z]/.test(m[1])) return null;
+    var unit = "";
+    var rest = m[3] || "";
+    if (m[2] && isKnownUnit(m[2])) {
+      unit = normalizeUnit(m[2]);
+    } else if (m[2]) {
+      rest = m[2] + (rest ? (/\s$/.test(m[2]) ? "" : " ") + rest : "");
+    }
+    rest = rest.replace(/^[,;:\.\s]+/, "").replace(/^of\s+/i, "").trim();
+    return { amount: amount, rawAmount: m[1].trim(), unit: unit, item: rest };
+  }
+
+  function looksLikeIngredient(line) {
+    return /^(?:[-\u2022\*\u00b7]?\s*)?[^,;:]*(?:,|;)?[^0-9]{0,60}$/.test(line) && !/\b(step|preheat|bake|cook)\b/i.test(line);
+  }
+
+  function parseRecipe(text) {
+    if (typeof text !== "string" || !text) {
+      return { title: "", servings: null, ingredients: [], instructions: [], ovenNotes: [], pantryText: [], panMentions: [] };
+    }
+    var lines = text.split(/\r?\n/);
+    var out = { title: "", servings: null, ingredients: [], instructions: [], ovenNotes: [], pantryText: [], panMentions: [] };
+    var current = null;
+    for (var i = 0; i < lines.length; i++) {
+      var raw = lines[i];
+      var line = raw.trim();
+      if (!line) continue;
+      var lc = line.toLowerCase();
+      if (current === null) {
+        if (/^#{0,3}\s*(?:ingredients?|what you need|shopping list)\b/i.test(line)) { current = "ing"; continue; }
+        if (/^#{0,3}\s*(?:directions?|instructions?|method|steps?|preparation)\b/i.test(line)) { current = "dir"; continue; }
+        if (/^#{0,3}\s*(?:pantry|shopping list)\b/i.test(line) && line.length < 60) { current = "pantry"; continue; }
+      }
+      var svMatch = line.match(/(?:serves|yield[s]?|makes|portions|feeds)\s*:?\s*(?:about\s*|approx\.?:?\s*)?(\d+(?:\.\d+)?)/i);
+      if (svMatch && out.servings === null) {
+        out.servings = parseFloat(svMatch[1]);
+        var titleCandidate = line.replace(/[([)]?\s*(?:serves|yields?|makes|portions|feeds)\s*:?\s*(?:about\s*)?[\d.]+(?:\s*(?:-|\u2013|to)\s*\d+(?:\.\d+)?)?[\])]?\s*/gi, "").replace(/[-\u2013\u2014:,]\s*$/, "").trim();
+        if (!out.title) out.title = titleCandidate;
+        continue;
+      }
+      if (/oven\b|bake at\b|roast at\b|preheat|broil\b|baking time|cook time|bake for/i.test(line) || ((/\d+\.?\d*\s*\u00b0\s*[FC]\b/i.test(line) || /\d+\.?\d*\s*degrees?\s*[FC]\b/i.test(line) || /fahrenheit|celsius/i.test(line)) && /\d/.test(line))) {
+        out.ovenNotes.push(line);
+      }
+      var panMatch = line.match(/(\d+(?:\.\d+)?)\s*(?:x|\u00d7|by)\s*(\d+(?:\.\d+)?)\s*(?:in(?:ch)?(?:es)?|[-"]|")+/i);
+      if (!panMatch) panMatch = line.match(/(\d+(?:\.\d+)?)\s*(?:x|\u00d7|by)\s*(\d+(?:\.\d+)?)\s*(?:inch|")/i);
+      if (!panMatch && /\b(?:pan|dish|tin)\b/i.test(line)) {
+        panMatch = line.match(/(\d+(?:\.\d+)?)\s*(?:x|\u00d7|by)\s*(\d+(?:\.\d+)?)\s*(?:in(?:ch)?(?:es)?)?/i);
+      }
+      if (panMatch) {
+        var a = parseFloat(panMatch[1]), b = parseFloat(panMatch[2]);
+        if (a >= 4 && b >= 4 && a <= 26 && b <= 26) {
+          var area = a * b;
+          out.panMentions.push({ w: a, h: b, area: area, text: a + "x" + b, round: false });
+        }
+      }
+      var roundPan = line.match(/(\d+(?:\.\d+)?)\s*[-\s]?(?:inch|in\.?|")\s*(round|springform|cake pan|skillet|tart|pie)/i);
+      if (roundPan) {
+        var dia = parseFloat(roundPan[1]);
+        if (dia >= 4 && dia <= 20) {
+          out.panMentions.push({ w: dia, h: dia, area: Math.PI * (dia / 2) * (dia / 2), text: dia + "-inch " + roundPan[2], round: true });
+        }
+      }
+      if (current === "ing") {
+        var ing = parseIngredientLine(line);
+        if (ing || looksLikeIngredient(line)) {
+          out.ingredients.push(ing || { amount: null, rawAmount: "", unit: "", item: line.replace(/^[-\u2022\*\u00b7\-\s]+/, "").trim() });
+          continue;
+        }
+        current = "dir";
+      }
+      if (current === "pantry") {
+        var panIng = parseIngredientLine(line);
+        out.pantryText.push(panIng && panIng.item ? panIng.item : line);
+        continue;
+      }
+      if (current === "dir") {
+        out.instructions.push(line);
+        continue;
+      }
+      if (!out.title) {
+        var next = lines.slice(i + 1).join("\n");
+        if (next.match(/\d|ingredient|serves|serves/i) || (out.ovenNotes.length > 0)) {
+          out.title = line.replace(/^[-\u2022\*\u00b7\#\s]+/, "").replace(/[-\u2013\u2014:,]\s*$/, "").trim();
+          continue;
+        }
+      }
+      var ing2 = parseIngredientLine(line);
+      if (ing2) {
+        out.ingredients.push(ing2);
+      } else if (looksLikeIngredient(line)) {
+        out.ingredients.push({ amount: null, rawAmount: "", unit: "", item: line.replace(/^[-\u2022\*\u00b7\-\s]+/, "").trim() });
+      } else {
+        out.instructions.push(line);
+      }
+    }
+    return out;
+  }
+
+  var CATEGORY_RULES = [
+    { cat: "Spices & seasonings", kw: ["salt", "black pepper", "white pepper", "red pepper flakes", "pepper flakes", "peppercorn", "cumin", "paprika", "cinnamon", "nutmeg", "cardamom", "coriander", "turmeric", "cayenne", "chili powder", " curry powder", "oregano", "thyme", "rosemary", "sage", "bay leaf", "italian seasoning", "allspice", "cloves", "anise", "ginger powder", "onion powder", "garlic powder", "seasoning", "spice", "taco seasoning", "sesame seed", "poppy seed", "caraway", "mustard seed", " msg", "lemon pepper", "chai spice", "pumpkin pie spice", "apple pie spice", "garam masala", "cajun seasoning", "old bay", "zatarain", "seasoned salt", "salt-free"] },
+    { cat: "Dairy & eggs", kw: ["milk", "cream", "butter", "cheese", "cheddar", "mozzarella", "parmesan", "feta", "ricotta", "provolone", "swiss cheese", "monterey jack", "colby", "yogurt", "yoghurt", "sour cream", "half-and-half", "buttermilk", "eggs", "egg whites", "egg yolks", "cream cheese", "mascarpone", " whey", "ghee", "margarine", " paneer", " custard", " evaporated", " condensed milk"] },
+    { cat: "Pantry & dry goods", kw: ["flour", "sugar", "rice", "pasta", "noodle", "oat", "quinoa", "lentil", "beans", "chickpea", "oil", "vinegar", "balsamic", "broth", "stock", "bouillon", "canned", "tomato paste", "tomato sauce", "honey", "maple syrup", "molasses", "corn syrup", "peanut butter", " tahini", "bread", "crouton", "breadcrumb", "tortilla", "cracker", "cornmeal", "cornstarch", "baking powder", "baking soda", "yeast", "coffee", "cocoa", "chocolate", "chocolate chip", "vanilla", "extract", "gelatin", "mayonnaise", "mustard", "ketchup", "soy sauce", "fish sauce", "hot sauce", "sriracha", "worcest", "miso", "coconut milk", "pecan", "walnut", "almond", "cashew", "pine nut", "peanut", "hazelnut", "seeds", "graham", "shortening", "water", "juice", "wine", "beer", "liquor", "rum", "whiskey", "vodka", "cider", "baking", "powder", "syrup", "sauce", "condensed", "starter"] },
+    { cat: "Meat & seafood", kw: ["chicken", "beef", "pork", "bacon", "ham", "turkey", "lamb", "sausage", "steak", "ground meat", "ground beef", "ground turkey", "ribs", "brisket", "salmon", "fish", "shrimp", "tuna", "cod", "tilapia", "anchov", "sardine", "crab", "scallop", "clam", "mussel", "lobster", "prosciutto", "pancetta", "chorizo", "pepperoni", "hot dog", "roast", "cutlet", "tenderloin", "drumstick", "wing"] },
+    { cat: "Frozen", kw: ["frozen"] },
+    { cat: "Produce", kw: ["onion", "garlic", "carrot", "celery", "bell pepper", "pepper", "tomato", "potato", "spinach", "kale", "lettuce", "cabbage", "broccoli", "cauliflower", "zucchini", "cucumber", "mushroom", "apple", "banana", "orange", "lemon", "lime", "berries", "strawber", "raspber", "blueber", "grape", "mango", "pineapple", "peach", "pear", "plum", "cherry", "melon", "avocado", "parsley", "cilantro", "basil", "mint", "dill", "ginger", "scallion", "green onion", "shallot", "leek", "corn", "peas", "radish", "beet", "squash", "pumpkin", "herb", "jalape\u00f1o", "habanero", "zest", "greens", "raisin", "date", "prune", "coconut", "asparagus", "bean sprout", "endive", "arugula", "bok choy", "turnip", "parsnip", "rutabaga", "eggplant", "artichoke", "brussels", "bamboo shoot", "water chestnut"] },
+    { cat: "Other", kw: [] }
+  ];
+
+  function categorizeIngredient(itemText) {
+    var s = String(itemText || "").toLowerCase().trim();
+    for (var i = 0; i < CATEGORY_RULES.length; i++) {
+      var kws = CATEGORY_RULES[i].kw;
+      for (var j = 0; j < kws.length; j++) {
+        var kw = kws[j].trim();
+        if (kw && s.indexOf(kw) !== -1) return CATEGORY_RULES[i].cat;
+      }
+    }
+    return "Other";
+  }
+
+  function groupPantry(ingredients) {
+    var groups = {};
+    var order = [];
+    for (var i = 0; i < ingredients.length; i++) {
+      var ing = ingredients[i];
+      var item = (ing.item || "").trim();
+      if (!item) continue;
+      var cat = categorizeIngredient(item);
+      if (!groups[cat]) { groups[cat] = []; order.push(cat); }
+      var txt = "";
+      if (ing.amount !== null && ing.amount !== undefined && isFinite(ing.amount)) {
+        var amtFrac = decimalToFracString(ing.amount, true) || String(ing.amount);
+        txt = amtFrac + (ing.unit ? " " + ing.unit : "") + " " + item;
+      } else {
+        txt = item;
+      }
+      groups[cat].push(txt.trim());
+    }
+    var out = [];
+    for (var c = 0; c < order.length; c++) out.push({ cat: order[c], items: groups[order[c]] });
+    return out;
+  }
+
+  var STANDARD_PANS = [
+    { name: "8x8 baking dish", area: 64 },
+    { name: "9x9 baking dish", area: 81 },
+    { name: "9x13 baking dish", area: 117 },
+    { name: "9-inch round cake pan", area: 63.6 },
+    { name: "10-inch round cake pan", area: 78.5 },
+    { name: "12-inch skillet/pizza pan", area: 113 },
+    { name: "9-inch pie plate", area: 63.6 },
+    { name: "half sheet pan (13x18)", area: 234 },
+    { name: "10x15 jelly roll pan", area: 150 },
+    { name: "standard 12-cup muffin tin", area: 96 },
+    { name: "9x5 loaf pan", area: 45 },
+    { name: "8-inch springform", area: 50 },
+    { name: "10-inch springform", area: 78.5 },
+    { name: "whole recipe (no change)", area: 1 }
+  ];
+
+  function suggestPan(baselineArea, factor, baselineLabel) {
+    if (!baselineArea || baselineArea <= 0 || !isFinite(factor) || factor <= 0) return [];
+    var target = baselineArea * factor;
+    var candidates = [];
+    for (var i = 0; i < STANDARD_PANS.length; i++) {
+      if (STANDARD_PANS[i].area === 1 || STANDARD_PANS[i].area === baselineArea) continue;
+      var ratio = STANDARD_PANS[i].area / target;
+      if (ratio >= 0.5 && ratio <= 1.6) {
+        candidates.push({ pan: STANDARD_PANS[i], ratio: ratio, miss: Math.abs(1 - ratio) });
+      }
+    }
+    candidates.sort(function (a, b) { return a.miss - b.miss; });
+    var out = [];
+    if (!candidates.length) {
+      out.push("A \u00d7" + (Math.round(factor * 100) / 100) + " batch needs area \u2248 " + Math.round(target) + " in\u00b2 \u2014 bigger than a common pan pattern; use the same pans side by side, or a doubled sheet-pan setup.");
+      return out;
+    }
+    var top = candidates[0];
+    var fTxt = "\u00d7" + (Math.round(factor * 100) / 100);
+    if (top.ratio >= 0.97 && top.ratio <= 1.03) {
+      out.push("Your " + top.pan.name + " is almost exactly the right size for a " + fTxt + " batch \u2014 pan area needed \u2248 " + Math.round(target) + " in\u00b2.");
+    } else if (top.ratio >= 0.97) {
+      out.push("For a " + fTxt + " batch, use a " + top.pan.name + " (area \u2248 " + Math.round(top.pan.area) + " in\u00b2 vs. needed \u2248 " + Math.round(target) + " in\u00b2 \u2014 good fit).");
+    } else if (top.ratio > 1.08) {
+      var fill = 1 / top.ratio;
+      var fillTxt = decimalToFracString(fill, true) || fill;
+      out.push("For a " + fTxt + " batch: use a " + top.pan.name + " filled about " + fillTxt + " full (start checking doneness early).");
+    } else {
+      var nPans = Math.floor(target / top.pan.area + 0.35);
+      var pansTxt = nPans + "\u00d7 " + top.pan.name;
+      out.push("For a " + fTxt + " batch: about " + pansTxt + " (total area \u2248 " + Math.round(top.pan.area * nPans) + " in\u00b2 vs. needed \u2248 " + Math.round(target) + " in\u00b2).");
+    }
+    var second = candidates[1];
+    if (second && second.miss < 0.16 && second.pan.name !== top.pan.name) {
+      out.push("Alternative pan: " + second.pan.name + ".");
+    }
+    return out;
+  }
+
+  function pantryMergeFormat(groups, title, servings) {
+    var lines = [];
+    lines.push("# Pantry list \u2014 " + (title || "Untitled recipe"));
+    if (servings) lines.push("(batch of " + servings + " servings)");
+    lines.push("");
+    for (var g = 0; g < groups.length; g++) {
+      lines.push("## " + groups[g].cat);
+      for (var i = 0; i < groups[g].items.length; i++) {
+        lines.push("- " + groups[g].items[i]);
+      }
+      lines.push("");
+    }
+    return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim() + "\n";
+  }
+
+  return {
+    gcd: gcd,
+    fractionToDecimal: fractionToDecimal,
+    decimalToFracString: decimalToFracString,
+    niceAmount: niceAmount,
+    scaledNice: scaledNice,
+    scaleLine: scaleLine,
+    parseIngredientLine: parseIngredientLine,
+    parseRecipe: parseRecipe,
+    looksLikeIngredient: looksLikeIngredient,
+    normalizeUnit: normalizeUnit,
+    categorizeIngredient: categorizeIngredient,
+    groupPantry: groupPantry,
+    suggestPan: suggestPan,
+    pantryMergeFormat: pantryMergeFormat,
+    UNIT_ALIASES: UNIT_ALIASES,
+    STANDARD_PANS: STANDARD_PANS,
+    CATEGORY_RULES: CATEGORY_RULES
+  };
+})();
+/*__PURE_MATH_END__*/
+
+(function app() {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var M = RECIPE_MATH;
+  var state = { title: "", servingsOrig: 4, factor: 1, recipe: null };
+  var LS_KEY = "recipe-card-scaler.v1";
+
+  function toast(msg) {
+    var t = $("toast");
+    t.textContent = msg;
+    t.classList.add("show");
+    setTimeout(function () { t.classList.remove("show"); }, 1800);
+  }
+
+  function calculateFactor(target, base) {
+    if (!base || base <= 0 || !target || target <= 0) return 1;
+    var f = target / base;
+    if (!isFinite(f) || f <= 0) return 1;
+    return Math.round(f * 1000) / 1000;
+  }
+
+  function fmtServings(v) {
+    return M.decimalToFracString(v, true) || String(v);
+  }
+
+  function doParse() {
+    var text = $("recipeInput").value;
+    if (!text.trim()) { toast("Paste a recipe first."); return; }
+    var recipe = M.parseRecipe(text);
+    if (!recipe.ingredients.length && !recipe.instructions.length && !recipe.panMentions.length) {
+      toast("Couldn't find much in that text — try adding amounts like \u201c2 cups flour\u201d.");
+    }
+    state.recipe = recipe;
+    state.title = recipe.title || $("recipeTitle").value.trim() || "Untitled recipe";
+    if (recipe.servings && recipe.servings > 0 && isFinite(recipe.servings)) {
+      state.servingsOrig = recipe.servings;
+      $("servingsOrig").value = recipe.servings;
+    }
+    state.factor = 1;
+    $("servingsTarget").value = state.servingsOrig;
+    $("recipeTitle").value = state.title;
+    $("results").classList.remove("hidden");
+    renderAll();
+    var msg = recipe.ingredients.length + " ingredient" + (recipe.ingredients.length === 1 ? "" : "s");
+    if (recipe.ovenNotes.length) msg += ", " + recipe.ovenNotes.length + " oven note" + (recipe.ovenNotes.length === 1 ? "" : "s");
+    if (recipe.panMentions.length) msg += ", " + recipe.panMentions.length + " pan";
+    $("parseStatus").textContent = "Found: " + msg + ".";
+  }
+
+  function renderAll() {
+    renderFactorBadge();
+    renderIngredients();
+    renderInstructions();
+    renderOvenNotes();
+    renderPanHints();
+    renderPantry();
+    renderLibrary();
+  }
+
+  function renderFactorBadge() {
+    var fStr = M.decimalToFracString(state.factor, true) || String(state.factor);
+    $("factorBadge").textContent = "\u00d7" + fStr;
+    var target = state.servingsOrig * state.factor;
+    $("factorBadge").title = fmtServings(state.servingsOrig) + " servings \u2192 about " + fmtServings(target) + " servings";
+    if (state.recipe) $("recipeTitle").value = state.title;
+  }
+
+  function renderIngredients() {
+    var body = $("ingBody");
+    body.innerHTML = "";
+    var r = state.recipe;
+    var shown = 0;
+    for (var i = 0; i < r.ingredients.length; i++) {
+      var ing = r.ingredients[i];
+      var tr = document.createElement("tr");
+      var html = "";
+      if (ing.amount !== null && ing.amount !== undefined && isFinite(ing.amount)) {
+        var scaled = M.scaledNice(ing.amount, state.factor);
+        var fStr = M.decimalToFracString(scaled, true) || String(scaled);
+        var origStr = M.decimalToFracString(ing.amount, true) || String(ing.amount);
+        var changed = Math.abs(scaled - ing.amount) > 1e-9;
+        html += "<td class='amt'><span" + (changed ? " class='changed'" : "") + ">" + fStr.replace("-", "") + "</span></td>";
+        html += "<td class='unit-col'>" + escapeHtml(M.normalizeUnit(ing.unit)) + "</td>";
+        html += "<td>" + escapeHtml(ing.item) + "</td>";
+        html += "<td class='orig'>" + escapeHtml(origStr) + "</td>";
+        shown++;
+      } else {
+        html += "<td class='amt'>&mdash;</td><td class='unit-col'></td><td>" + escapeHtml(ing.item) + "</td><td class='orig'></td>";
+      }
+      tr.innerHTML = html;
+      body.appendChild(tr);
+    }
+    $("ingEmpty").classList.toggle("hidden", shown > 0);
+  }
+
+  function escapeHtml(s) {
+    return String(s === undefined || s === null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+
+  function renderInstructions() {
+    var div = $("instrOutput");
+    div.innerHTML = "";
+    var r = state.recipe;
+    if (!r.instructions.length) {
+      div.innerHTML = "<span class='empty'>No step lines detected. Steps will still be kept in the pantry list and save file.</span>";
+      return;
+    }
+    for (var i = 0; i < r.instructions.length; i++) {
+      var scaled = M.scaleLine(r.instructions[i], state.factor);
+      var p = document.createElement("div");
+      p.className = "step";
+      p.textContent = scaled.text;
+      div.appendChild(p);
+    }
+  }
+
+  function renderOvenNotes() {
+    var box = $("ovenNotes");
+    box.innerHTML = "";
+    var r = state.recipe;
+    if (!r.ovenNotes.length) {
+      box.innerHTML = "<p class='empty' style='margin:0.2rem 0 0.4rem'>None detected — add one, e.g. \u201cBake at 375\u00b0F for 25 minutes\u201d.</p>";
+      renderTimeAdvice();
+      return;
+    }
+    for (var i = 0; i < r.ovenNotes.length; i++) {
+      var row = document.createElement("div");
+      row.className = "oven-note";
+      var input = document.createElement("input");
+      input.type = "text";
+      input.value = r.ovenNotes[i];
+      input.dataset.idx = String(i);
+      input.addEventListener("input", function (e) {
+        var idx = parseInt(e.target.dataset.idx, 10);
+        state.recipe.ovenNotes[idx] = e.target.value;
+        renderTimeAdvice();
+      });
+      var del = document.createElement("button");
+      del.className = "ghost small";
+      del.textContent = "\u00d7";
+      del.title = "Remove note";
+      del.addEventListener("click", (function (idx) {
+        return function () {
+          state.recipe.ovenNotes.splice(idx, 1);
+          renderOvenNotes();
+        };
+      })(i));
+      row.appendChild(input);
+      row.appendChild(del);
+      box.appendChild(row);
+    }
+    renderTimeAdvice();
+  }
+
+  function renderTimeAdvice() {
+    var box = $("timeAdvice");
+    var f = state.factor;
+    var notes = (state.recipe ? state.recipe.ovenNotes : []).filter(function (n) { return /\b\d+\s*(min|minute|hour|hr|second)/i.test(n); });
+    if (!notes.length) {
+      box.innerHTML = "<strong>Batch-time tip:</strong> doubling a batch usually needs only a little more time (roughly 1.25\u00d7, never 2\u00d7). Keep temperature the same and check doneness early.";
+      return;
+    }
+    var html = "<strong>Time guidance at \u00d7" + (M.decimalToFracString(f, true) || f) + ":</strong><ul style='margin:0.4rem 0 0 1.1rem'>";
+    var shown = false;
+    for (var i = 0; i < notes.length; i++) {
+      var m = notes[i].match(/\b(\d+)\s*(minutes?|mins?|hours?|hrs?|seconds?)\b/i);
+      if (!m) continue;
+      shown = true;
+      var orig = parseFloat(m[1]);
+      var unitWord = m[2].toLowerCase();
+      var unit = unitWord.indexOf("h") === 0 ? "hr" : unitWord.indexOf("s") === 0 ? "sec" : "min";
+      var factorAdj = f <= 1 ? Math.pow(f, 0.85) : Math.pow(f, 0.6);
+      var adjTime = Math.ceil(orig * factorAdj);
+      var adviceTxt = unit === "hr" && adjTime >= 2 ? Math.ceil(orig * Math.pow(f, 0.5)) + "\u2013" + Math.ceil(adjTime * 1.1) + " " + unit : adjTime + " " + unit;
+      html += "<li>" + escapeHtml(notes[i]) + " \u2014 suggest roughly <strong>" + adviceTxt + "</strong>; keep the temperature the same and verify doneness.</li>";
+    }
+    html += "</ul>";
+    box.innerHTML = shown ? html : "<strong>Batch-time tip:</strong> doubling a batch usually needs only a little more time (roughly 1.25\u00d7, never 2\u00d7). Keep temperature the same and check doneness early.";
+  }
+
+  function renderPanHints() {
+    var box = $("panHints");
+    var advice = $("panAdvice");
+    box.innerHTML = "";
+    var r = state.recipe;
+    if (!r.panMentions.length) {
+      box.innerHTML = "<p class='empty' style='margin:0.2rem 0 0.4rem'>No pans detected. Mentions like \u201c9x13 dish\u201d or \u201c9-inch round\u201d would show here.</p>";
+      advice.classList.add("hidden");
+      return;
+    }
+    var html = "<ul style='margin:0;padding-left:1.1rem'>";
+    for (var i = 0; i < r.panMentions.length; i++) {
+      var pan = r.panMentions[i];
+      html += "<li><strong>" + escapeHtml(pan.text) + "</strong>" + (pan.round ? " (round)" : "") + " \u2014 area \u2248 " + Math.round(pan.area) + " in\u00b2</li>";
+    }
+    html += "</ul>";
+    box.innerHTML = html;
+    var suggestions = M.suggestPan(r.panMentions[0].area, state.factor, r.panMentions[0].text);
+    if (suggestions.length) {
+      var sh = "";
+      for (var q = 0; q < suggestions.length; q++) sh += "<div>\ud83d\udca1 " + escapeHtml(suggestions[q]) + "</div>";
+      advice.innerHTML = sh;
+      advice.classList.remove("hidden");
+    } else {
+      advice.innerHTML = "<div>\ud83d\udca1 Pan area scales linearly with batch size \u2014 at \u00d71 there's nothing to change.</div>";
+      advice.classList.remove("hidden");
+    }
+  }
+
+  function scaledIngredientList() {
+    var r = state.recipe;
+    return r.ingredients.map(function (ing) {
+      if (ing.amount !== null && ing.amount !== undefined && isFinite(ing.amount)) {
+        return { amount: M.scaledNice(ing.amount, state.factor), unit: M.normalizeUnit(ing.unit), item: ing.item };
+      }
+      return { amount: null, unit: "", item: ing.item };
+    });
+  }
+
+  function renderPantry() {
+    var box = $("pantryGroups");
+    var scaledList = scaledIngredientList();
+    var groups = M.groupPantry(scaledList);
+    var html = "";
+    for (var g = 0; g < groups.length; g++) {
+      html += "<div class='pantry-group'><h3>" + escapeHtml(groups[g].cat) + "</h3><ul>";
+      for (var i = 0; i < groups[g].items.length; i++) html += "<li>" + escapeHtml(groups[g].items[i]) + "</li>";
+      html += "</ul></div>";
+    }
+    box.innerHTML = html || "<p class='empty'>Nothing to list yet.</p>";
+  }
+
+  function pantryTextForMerge() {
+    var groups = M.groupPantry(scaledIngredientList());
+    var targetServings = Math.round(state.servingsOrig * state.factor * 100) / 100;
+    return M.pantryMergeFormat(groups, state.title, fmtServings(targetServings));
+  }
+
+  function setFactor(f) {
+    if (!isFinite(f) || f <= 0) f = 1;
+    state.factor = Math.round(f * 1000) / 1000;
+    $("servingsTarget").value = M.niceAmount(state.servingsOrig * state.factor) || state.servingsOrig * state.factor;
+    renderAll();
+  }
+
+  function setServingsFactor() {
+    var orig = parseFloat($("servingsOrig").value);
+    var target = parseFloat($("servingsTarget").value);
+    if (isFinite(orig) && orig > 0) state.servingsOrig = orig;
+    if (!isFinite(target) || target <= 0) target = state.servingsOrig;
+    state.factor = calculateFactor(target, state.servingsOrig);
+    renderAll();
+  }
+
+  function saveCard() {
+    if (!state.recipe) { toast("Parse a recipe first."); return; }
+    try {
+      var name = $("saveName").value.trim() || state.title || "Untitled recipe";
+      var card = {
+        name: name,
+        savedAt: new Date().toISOString(),
+        title: state.title,
+        servingsOrig: state.servingsOrig,
+        factor: state.factor,
+        text: $("recipeInput").value,
+        ovenNotes: state.recipe.ovenNotes.slice()
+      };
+      var lib = loadLibrary();
+      var found = false;
+      for (var i = 0; i < lib.length; i++) {
+        if (lib[i].name === name) { lib[i] = card; found = true; break; }
+      }
+      if (!found) lib.push(card);
+      writeLibrary(lib);
+      $("saveName").value = "";
+      renderLibrary();
+      toast(found ? "Card updated: " + name : "Card saved: " + name);
+    } catch (err) {
+      toast("Could not save (storage unavailable in this browser?).");
+    }
+  }
+
+  function loadLibrary() {
+    try {
+      var raw = localStorage.getItem(LS_KEY);
+      if (!raw) return [];
+      var arr = JSON.parse(raw);
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+  }
+
+  function writeLibrary(lib) {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(lib)); }
+    catch (e) { toast("Storage failed (private mode?). Library not saved."); }
+  }
+
+  function renderLibrary() {
+    var lib = loadLibrary();
+    var box = $("libraryList");
+    box.innerHTML = "";
+    $("libraryEmpty").classList.toggle("hidden", lib.length > 0);
+    for (var i = 0; i < lib.length; i++) {
+      (function (idx) {
+        var item = document.createElement("div");
+        item.className = "library-item";
+        var card = lib[idx];
+        var fStr = M.decimalToFracString(card.factor, true) || String(card.factor);
+        item.innerHTML = "<span class='name'><strong>" + escapeHtml(card.name) + "</strong> <span class='empty'>" +
+          escapeHtml(String(card.savedAt).slice(0, 10)) + " \u00b7 \u00d7" + escapeHtml(fStr) +
+          "</span></span>";
+        var load = document.createElement("button");
+        load.className = "secondary small";
+        load.textContent = "Load";
+        load.addEventListener("click", function () {
+          $("recipeInput").value = card.text || "";
+          state.title = card.title || card.name;
+          state.servingsOrig = card.servingsOrig || 4;
+          $("servingsOrig").value = state.servingsOrig;
+          var recipe = M.parseRecipe(card.text || "");
+          recipe.title = state.title;
+          if (card.ovenNotes && card.ovenNotes.length) recipe.ovenNotes = card.ovenNotes.slice();
+          state.recipe = recipe;
+          $("recipeTitle").value = state.title;
+          $("results").classList.remove("hidden");
+          setFactor(card.factor || 1);
+          $("servingsTarget").value = M.niceAmount(state.servingsOrig * state.factor) || state.servingsOrig * state.factor;
+          toast("Loaded: " + card.name);
+        });
+        var del = document.createElement("button");
+        del.className = "ghost small";
+        del.textContent = "Delete";
+        del.addEventListener("click", function () {
+          var lib2 = loadLibrary();
+          lib2.splice(idx, 1);
+          writeLibrary(lib2);
+          renderLibrary();
+          toast("Deleted: " + card.name);
+        });
+        item.appendChild(load);
+        item.appendChild(del);
+        box.appendChild(item);
+      })(i);
+    }
+  }
+
+  function downloadText(filename, text, mime) {
+    var blob = new Blob([text], { type: mime || "text/plain;charset=utf-8" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  }
+
+  function slugName() {
+    return (state.title || "recipe").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "recipe";
+  }
+
+  function cardHtmlText() {
+    var r = state.recipe;
+    var out = [];
+    out.push("<!DOCTYPE html><html><head><meta charset='utf-8'><title>" + escapeHtml(state.title) + "</title>");
+    out.push("<style>body{font-family:Georgia,serif;max-width:40rem;margin:2rem auto;padding:0 1rem;color:#222}h1{font-size:1.5rem}h2{font-size:1.05rem;border-bottom:1px solid #ccc}.amt{font-weight:bold}table{border-collapse:collapse}td{border-bottom:1px solid #eee;padding:.3rem .6rem}</style></head><body>");
+    out.push("<h1>" + escapeHtml(state.title) + "</h1>");
+    var target = state.servingsOrig * state.factor;
+    out.push("<p><em>Batch: " + escapeHtml(fmtServings(state.servingsOrig)) + " \u2192 <strong>" + escapeHtml(fmtServings(target)) + "</strong> servings (\u00d7" + escapeHtml(M.decimalToFracString(state.factor, true) || String(state.factor)) + ")</em></p>");
+    out.push("<h2>Ingredients</h2><table>");
+    for (var i = 0; i < r.ingredients.length; i++) {
+      var ing = r.ingredients[i];
+      if (ing.amount !== null && ing.amount !== undefined && isFinite(ing.amount)) {
+        var s = M.scaledNice(ing.amount, state.factor);
+        var sTxt = M.decimalToFracString(s, true) || String(s);
+        out.push("<tr><td class='amt'>" + escapeHtml(sTxt) + "</td><td>" + escapeHtml(M.normalizeUnit(ing.unit)) + "</td><td>" + escapeHtml(ing.item) + "</td></tr>");
+      } else {
+        out.push("<tr><td></td><td></td><td>" + escapeHtml(ing.item) + "</td></tr>");
+      }
+    }
+    out.push("</table><h2>Instructions</h2>");
+    for (var k = 0; k < r.instructions.length; k++) {
+      out.push("<p>" + escapeHtml(M.scaleLine(r.instructions[k], state.factor).text) + "</p>");
+    }
+    if (r.ovenNotes.length) {
+      out.push("<h2>Oven &amp; time notes</h2><ul>");
+      for (var n = 0; n < r.ovenNotes.length; n++) out.push("<li>" + escapeHtml(r.ovenNotes[n]) + "</li>");
+      out.push("</ul>");
+    }
+    out.push("<p style='color:#888;font-size:.8rem'>Saved from Recipe Card Scaler \u00b7 MIT License \u00b7 Asdale Dynamics, LLC</p></body></html>");
+    return out.join("\n");
+  }
+
+  function exportAll() {
+    var lib = loadLibrary();
+    if (!lib.length) { toast("Library is empty."); return; }
+    downloadText("recipe-cards-export.json", JSON.stringify(lib, null, 2), "application/json");
+    toast("Exported " + lib.length + " card" + (lib.length === 1 ? "" : "s") + ".");
+  }
+
+  function importFileText(text) {
+    try {
+      var arr = JSON.parse(text);
+      if (!Array.isArray(arr)) throw new Error("not an array");
+      var lib = loadLibrary();
+      var added = 0;
+      for (var i = 0; i < arr.length; i++) {
+        var c = arr[i];
+        if (c && typeof c.name === "string" && typeof c.text === "string") {
+          var exists = false;
+          for (var j = 0; j < lib.length; j++) {
+            if (lib[j].name === c.name) { exists = true; break; }
+          }
+          if (!exists) {
+            lib.push({
+              name: c.name,
+              savedAt: c.savedAt || new Date().toISOString(),
+              title: c.title || c.name,
+              servingsOrig: c.servingsOrig || 4,
+              factor: c.factor || 1,
+              text: c.text,
+              ovenNotes: Array.isArray(c.ovenNotes) ? c.ovenNotes.slice() : []
+            });
+            added++;
+          }
+        }
+      }
+      writeLibrary(lib);
+      renderLibrary();
+      toast(added ? "Imported " + added + " new card" + (added === 1 ? "" : "s") + "." : "Nothing new to import.");
+    } catch (e) {
+      toast("Import failed \u2014 expected a JSON export from this app.");
+    }
+  }
+
+  function copyToClipboard(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { toast("Copied."); }, function () { fallbackCopy(text); });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  function fallbackCopy(text) {
+    var ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    toast(ok ? "Copied." : "Copy failed \u2014 select and copy manually.");
+  }
+
+  var SAMPLE = [
+    "Homestyle Tomato Soup (serves 4)",
+    "",
+    "2 tbsp olive oil",
+    "1 1/2 cups chopped onion",
+    "3 cloves garlic, minced",
+    "28 oz can crushed tomatoes",
+    "2 cups vegetable broth",
+    "1/2 tsp salt",
+    "1/4 tsp black pepper",
+    "1/4 cup fresh basil, chopped",
+    "",
+    "Directions",
+    "Heat oil in a pot over medium heat. Cook onion for 5 minutes, until soft.",
+    "Stir in garlic and cook 30 seconds, then add tomatoes and broth.",
+    "Simmer for 20 minutes, then blend until smooth.",
+    "",
+    "Casserole variation: pour into a 9x13 baking dish and bake at 375°F for 25 minutes.",
+    "An 8x8 dish works for a thicker bake.",
+    "",
+    "Makes about 4 servings. Serve hot with crusty bread."
+  ].join("\n");
+
+  function init() {
+    $("parseBtn").addEventListener("click", doParse);
+    $("sampleBtn").addEventListener("click", function () {
+      $("recipeInput").value = SAMPLE;
+      doParse();
+    });
+    $("clearBtn").addEventListener("click", function () {
+      $("recipeInput").value = "";
+      $("results").classList.add("hidden");
+      $("parseStatus").textContent = "";
+    });
+    $("setFactorBtn").addEventListener("click", setServingsFactor);
+    $("halveBtn").addEventListener("click", function () { setFactor(state.factor / 2); });
+    $("doubleBtn").addEventListener("click", function () { setFactor(state.factor * 2); });
+    $("resetBtn").addEventListener("click", function () { setFactor(1); });
+    $("recipeTitle").addEventListener("input", function (e) { state.title = e.target.value.trim() || state.title; });
+    $("saveBtn").addEventListener("click", saveCard);
+    $("exportBtn").addEventListener("click", exportAll);
+    $("importBtn").addEventListener("click", function () { $("importFile").click(); });
+    $("importFile").addEventListener("change", function (e) {
+      if (e.target.files && e.target.files[0]) {
+        var reader = new FileReader();
+        reader.onload = function () { importFileText(String(reader.result)); };
+        reader.readAsText(e.target.files[0]);
+        e.target.value = "";
+      }
+    });
+    $("addOvenNoteBtn").addEventListener("click", function () {
+      if (!state.recipe) { toast("Parse a recipe first."); return; }
+      state.recipe.ovenNotes.push("");
+      renderOvenNotes();
+      var inputs = $("ovenNotes").querySelectorAll("input");
+      if (inputs.length) inputs[inputs.length - 1].focus();
+    });
+    $("servingsOrig").addEventListener("change", function (e) {
+      var v = parseFloat(e.target.value);
+      if (isFinite(v) && v > 0) state.servingsOrig = v;
+    });
+    $("servingsTarget").addEventListener("keydown", function (e) {
+      if (e.key === "Enter") setServingsFactor();
+    });
+    $("copyPantryBtn").addEventListener("click", function () {
+      if (!state.recipe) { toast("Parse a recipe first."); return; }
+      copyToClipboard(pantryTextForMerge());
+    });
+    $("dlPantryBtn").addEventListener("click", function () {
+      if (!state.recipe) { toast("Parse a recipe first."); return; }
+      downloadText(slugName() + "-pantry-list.txt", pantryTextForMerge());
+      toast("Pantry list downloaded.");
+    });
+    $("dlHtmlBtn").addEventListener("click", function () {
+      if (!state.recipe) { toast("Parse a recipe first."); return; }
+      downloadText(slugName() + "-card.html", cardHtmlText(), "text/html;charset=utf-8");
+      toast("Card downloaded.");
+    });
+    renderLibrary();
+  }
+
+  window.__recipeScalerState = state;
+  window.__recipeScalerHooks = {
+    doParse: doParse,
+    setFactor: setFactor,
+    setServingsFactor: setServingsFactor,
+    pantryTextForMerge: pantryTextForMerge,
+    calculateFactor: calculateFactor
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
